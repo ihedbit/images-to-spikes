@@ -140,6 +140,51 @@ def image_to_poisson_trains(image_list, image_height, image_width, max_freq, dur
     return spike_source_data
 
 
+def ttfs_generator(normalized_intensity, t_start, duration):
+    '''Time-to-First-Spike encoder for a single pixel.
+       Brighter pixels fire earlier; zero-intensity pixels produce no spike.
+
+       :param normalized_intensity: Pixel intensity in [0, 1]
+       :param t_start: Stimulus onset (milliseconds)
+       :param duration: Stimulus window length (milliseconds)
+
+       :returns: List with a single spike time, or empty list if intensity is 0
+    '''
+    if normalized_intensity <= 0:
+        return []
+    spike_time = t_start + (1.0 - normalized_intensity) * duration
+    return [spike_time]
+
+
+def image_to_ttfs_trains(image_list, image_height, image_width, duration, silence):
+    '''Generate Time-to-First-Spike trains for images.
+       Each pixel fires at most once per image presentation; brighter pixels fire earlier.
+
+       :param image_list: Image list, numpy array of shape (num_images, height*width),
+                          pixel values in [0, 255]
+       :param image_height: Image height in pixels
+       :param image_width: Image width in pixels
+       :param duration: Stimulus presentation window (milliseconds)
+       :param silence: Silent gap between images (milliseconds)
+
+       :returns: A PyNN SpikeSourceArray-compatible spike array
+    '''
+    spike_source_data = [[] for _ in range(image_height * image_width)]
+
+    for i in range(image_list.shape[0]):
+        t_start = i * (duration + silence)
+        max_val = image_list[i].max()
+        if max_val == 0:
+            continue
+        for j in range(image_height * image_width):
+            normalized = image_list[i][j] / max_val
+            spikes = ttfs_generator(normalized, t_start, duration)
+            if spikes:
+                spike_source_data[j].extend(spikes)
+
+    return spike_source_data
+
+
 def aerfile_to_spike(file_name, image_size, jaer_size):
     '''Reads an AER file and converts it to a couple of PyNN SpikeSourceArrays.
         :param file_name: Name of the file to open
